@@ -1,0 +1,42 @@
+#!/bin/bash
+arch="$(uname -m)"
+release="$(uname -r)"
+upstream="${release%%-*}"
+local="${release#*-}"
+mkdir -p /usr/src
+wget -O "/usr/src/linux-${upstream}.tar.xz" "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-${upstream}.tar.xz"
+tar xf "/usr/src/linux-${upstream}.tar.xz" -C /usr/src/
+ln -fns "/usr/src/linux-${upstream}" /usr/src/linux
+ln -fns "/usr/src/linux-${upstream}" "/lib/modules/${release}/build"
+wget -O "/usr/src/linux/.config" "http://mirror.scaleway.com/kernel/${arch}/${release}/config"
+wget -O /usr/src/linux/Module.symvers "http://mirror.scaleway.com/kernel/${arch}/${release}/Module.symvers"
+printf 'CONFIG_LOCALVERSION="%s"\n' "${local:+-$local}" >> /usr/src/linux/.config
+yum -y groupinstall 'Development Tools'
+yum -y install openssl-devel
+make -C /usr/src/linux prepare modules_prepare
+cd /usr/src/
+wget https://github.com/zfsonlinux/zfs/releases/download/zfs-0.6.5.9/spl-0.6.5.9.tar.gz
+wget https://github.com/zfsonlinux/zfs/releases/download/zfs-0.6.5.9/zfs-0.6.5.9.tar.gz
+yum -y install uuid-devel
+yum -y install libuuid-devel
+tar xvfa spl-0.6.5.9.tar.gz
+cd spl-0.6.5.9/
+./autogen.sh
+./configure      # Takes about 2 minutes
+make             # Takes about 1:10 minutes
+make install
+cd ..
+tar xvfa zfs-0.6.5.9.tar.gz
+cd zfs-0.6.5.9/
+./autogen.sh
+./configure      # Takes about 6:10 minutes
+make             # Takes about 10:30 minutes
+make install
+depmod -a
+ldconfig
+modprobe zfs
+zfs list
+zpool list
+yum -i install docker
+systemctl start docker
+docker run -rm hello-world
